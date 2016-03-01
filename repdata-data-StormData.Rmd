@@ -1,0 +1,111 @@
+---
+title: "project2-analysing stormdata"
+output: html_document
+---
+This project is to explore the NOAA Storm Database and answer some basic questions about severe weather events.
+
+Download data file from url and save it. Read the data. Load necessary packages.
+
+```{r}
+download.file("https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2", destfile = "repdata-data-StormData.csv")
+
+stormdata <- read.csv("repdata-data-StormData.csv")
+
+suppressMessages(library(dplyr))
+library(ggplot2)
+
+```
+
+Simplify and clean the data.
+```{r}
+sd_sub <- stormdata[, c(8, 23:28)]
+
+sd_sub$EVTYPE[grep("WIND", sd_sub$EVTYPE)] <- "WIND"
+sd_sub$EVTYPE[grep("HEAT", sd_sub$EVTYPE)] <- "HEAT"
+sd_sub$EVTYPE[grep("SNOW", sd_sub$EVTYPE)] <- "SNOW"
+sd_sub$EVTYPE[grep("TSTM", sd_sub$EVTYPE)] <- "THUNDERSTORM"
+sd_sub$EVTYPE[grep("COLD", sd_sub$EVTYPE)] <- "COLD"
+sd_sub$EVTYPE[grep("RAIN", sd_sub$EVTYPE)] <- "RAIN"
+sd_sub$EVTYPE[grep("FLOOD", sd_sub$EVTYPE)] <- "FLOOD"
+sd_sub$EVTYPE[grep("HURRICANE", sd_sub$EVTYPE)] <- "HURRICANE"
+
+sd_sub$PROPDMGEXP <- as.character(sd_sub$PROPDMGEXP)
+sd_sub$CROPDMGEXP <- as.character(sd_sub$CROPDMGEXP)
+unique(sd_sub$PROPDMGEXP)
+unique(sd_sub$CROPDMGEXP)
+sub_PDEXP <- c("M","m","B","5","6","7","8")
+sub_CDEXP <- c("M","m","B")
+
+sub1 <- filter(sd_sub, FATALITIES >=1 | INJURIES >= 1 | PROPDMGEXP %in% sub_PDEXP | CROPDMGEXP %in% sub_CDEXP)
+
+unique(sub1$PROPDMGEXP)
+unique(sub1$CROPDMGEXP)
+
+sub1$PROPDMGEXP[sub1$PROPDMGEXP == "B"] <- "1000000000"
+sub1$PROPDMGEXP[sub1$PROPDMGEXP == "M"] <- "1000000"
+sub1$PROPDMGEXP[sub1$PROPDMGEXP == "m"] <- "1000000"
+sub1$PROPDMGEXP[sub1$PROPDMGEXP == "K"] <- "1000"
+sub1$PROPDMGEXP[sub1$PROPDMGEXP == "H"] <- "100"
+sub1$PROPDMGEXP[sub1$PROPDMGEXP == "5"] <- "100000"
+sub1$PROPDMGEXP[sub1$PROPDMGEXP == "6"] <- "1000000"
+sub1$PROPDMGEXP[sub1$PROPDMGEXP == "7"] <- "10000000"
+sub1$PROPDMGEXP[sub1$PROPDMGEXP == "8"] <- "100000000"
+sub1$PROPDMGEXP[sub1$PROPDMGEXP == "0"] <- "1"
+sub1$PROPDMGEXP[sub1$PROPDMGEXP == ""] <- "1"
+sub1$PROPDMGEXP[sub1$PROPDMGEXP == "-"] <- "1"
+
+sub1$CROPDMGEXP[sub1$CROPDMGEXP == "B"] <- "1000000000"
+sub1$CROPDMGEXP[sub1$CROPDMGEXP == "M"] <- "1000000"
+sub1$CROPDMGEXP[sub1$CROPDMGEXP == "m"] <- "1000000"
+sub1$CROPDMGEXP[sub1$CROPDMGEXP == "K"] <- "1000"
+sub1$CROPDMGEXP[sub1$CROPDMGEXP == ""] <- "1"
+sub1$PROPDMGEXP[sub1$PROPDMGEXP == "?"] <- "1"
+sub1$PROPDMGEXP[sub1$PROPDMGEXP == "0"] <- "1"
+
+sub1$PROPDMGEXP <- as.numeric(sub1$PROPDMGEXP)
+sub1$CROPDMGEXP <- as.numeric(sub1$CROPDMGEXP)
+
+sub2 <- sub1 %>% mutate(PROP = PROPDMG*PROPDMGEXP, CROP = CROPDMG*CROPDMGEXP)
+
+```
+
+1. Across the United States, which types of events (as indicated in the EVTYPE variable) are most harmful with respect to population health?
+```{r}
+summary_by_event <- sub2 %>% group_by(EVTYPE) %>% 
+    summarize_each(funs(sum), FATALITIES, INJURIES, PROP, CROP)
+
+totalfatal <- summary_by_event %>% select(EVTYPE, FATALITIES) %>%
+  arrange(desc(FATALITIES)) 
+top10fatal <- totalfatal[1:10,]
+top10fatal
+
+ggplot(top10fatal, aes(x=reorder(EVTYPE, -FATALITIES), y=FATALITIES)) + geom_bar(stat = "identity", fill = "blue") + labs(y="Total Fatalities", x="Event") + theme(axis.text.x = element_text(angle = 90)) + ggtitle("Events with the top 10 fatalies")
+
+totalinj <- summary_by_event %>% select(EVTYPE, INJURIES) %>%
+  arrange(desc(INJURIES)) 
+
+top10inj <- totalinj[1:10,]
+top10inj
+
+ggplot(top10inj, aes(x=reorder(EVTYPE, -INJURIES), y=INJURIES)) + geom_bar(stat = "identity", fill = "blue") + labs(y="Total Injuries", x="Event") + theme(axis.text.x = element_text(angle = 90)) + ggtitle("Events with the top 10 injuries")
+
+```
+
+
+2. Across the United States, which types of events have the greatest economic consequences?
+```{r}
+totalpropdmg <- summary_by_event %>% select(EVTYPE, PROP) %>%
+  arrange(desc(PROP)) 
+top10propdmg <- totalpropdmg[1:10,]
+top10propdmg
+
+ggplot(top10propdmg, aes(x=reorder(EVTYPE, -PROP), y=PROP)) + geom_bar(stat = "identity", fill = "blue") + labs(y="Total Property Damages", x="Event") + theme(axis.text.x = element_text(angle = 90)) + ggtitle("Events with the top 10 property damages")
+
+totalcropdmg <- summary_by_event %>% select(EVTYPE, CROP) %>%
+  arrange(desc(CROP)) 
+top10cropdmg <- totalcropdmg[1:10,]
+top10cropdmg
+
+ggplot(top10cropdmg, aes(x=reorder(EVTYPE, -CROP), y=CROP)) + geom_bar(stat = "identity", fill = "blue") + labs(y="Total Crop Damages", x="Event") + theme(axis.text.x = element_text(angle = 90)) + ggtitle("Events with the top 10 crop damages")
+
+```
